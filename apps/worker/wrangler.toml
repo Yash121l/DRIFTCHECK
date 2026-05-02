@@ -1,0 +1,45 @@
+name = "driftcheck-worker"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+compatibility_flags = ["nodejs_compat"]
+
+[browser]
+binding = "BROWSER"
+
+[ai]
+binding = "AI"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "driftcheck-db"
+database_id = "e357db5a-5e77-4c9e-86b7-8fb8d2692adb"
+preview_database_id = "55d26fdb-07bb-4f4c-89de-47bb8cab61e0"
+
+[[r2_buckets]]
+binding = "SCREENSHOTS"
+bucket_name = "driftcheck-screenshots"
+preview_bucket_name = "driftcheck-screenshots-preview"
+
+[[vectorize]]
+binding = "SCREENSHOT_VECTORS"
+index_name = "driftcheck-perceptual"
+
+[[kv_namespaces]]
+binding = "API_KEYS"
+id = "1a8f4f51d2ef4d4fb270f4c9a3148a94"
+preview_id = "12338a7ed3134a7cac4b7a1e699d0b8e"
+
+[[send_email]]
+name = "EMAIL"
+
+[[workflows]]
+binding = "CRAWL_WORKFLOW"
+name = "crawl-workflow"
+class_name = "CrawlWorkflow"
+script_name = "driftcheck-worker"
+
+[triggers]
+crons = ["0 */6 * * *"]
+
+[vars]
+BASE_URL = "https://driftcheck-worker.yashlunawat-tech.workers.dev"

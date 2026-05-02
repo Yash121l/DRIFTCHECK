@@ -1,0 +1,18 @@
+{
+  "name": "driftcheck",
+  "version": "1.0.0",
+  "private": true,
+  "workspaces": [
+    "apps/worker",
+    "apps/web"
+  ],
+  "scripts": {
+    "dev:worker": "npm -w apps/worker run dev",
+    "dev:web": "npm -w apps/web run dev",
+    "build:web": "npm -w apps/web run build",
+    "deploy:worker": "npm -w apps/worker run deploy",
+    "typecheck": "npm -w apps/worker run typecheck && npm -w apps/web run typecheck",
+    "test": "npm -w apps/worker run test",
+    "test:coverage": "npm -w apps/worker run test:coverage"
+  }
+}
