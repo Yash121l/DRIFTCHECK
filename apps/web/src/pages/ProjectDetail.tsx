@@ -4,6 +4,16 @@ import RunStatusBadge from "../components/RunStatusBadge";
 import { useProject } from "../hooks/useProject";
 import { api } from "../lib/api";
 
+function dur(s: number, e: number | null): string {
+  if (!e) return "—";
+  const d = Math.round((e - s) / 1000);
+  return d < 60 ? `${d}s` : `${Math.floor(d / 60)}m ${d % 60}s`;
+}
+
+function fmt(ts: number): string {
+  return new Date(ts).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
+}
+
 export default function ProjectDetail() {
   const { projectId } = useParams<{ projectId: string }>();
   const { data, isLoading, error } = useProject(projectId!);
@@ -14,94 +24,94 @@ export default function ProjectDetail() {
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["project", projectId] }),
   });
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
-
-  if (error || !data) {
-    return (
-      <div className="flex items-center justify-center min-h-screen">
-        <p className="text-red-400">{(error as Error)?.message ?? "Project not found"}</p>
-      </div>
-    );
-  }
+  if (isLoading) return <div className="spinner-screen"><div className="spinner" /></div>;
+  if (error || !data) return (
+    <div className="spinner-screen" style={{ color: "var(--red)", fontSize: 13 }}>
+      {(error as Error)?.message ?? "Not found"}
+    </div>
+  );
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex items-center gap-2 text-sm text-gray-400 mb-6">
-        <Link to="/" className="hover:text-white transition-colors">Projects</Link>
-        <span>/</span>
-        <span className="text-white">{data.name}</span>
-      </div>
+    <div className="page-wrap">
+      <nav className="breadcrumb">
+        <Link to="/">Projects</Link>
+        <span className="breadcrumb-sep">/</span>
+        <span className="breadcrumb-current">{data.name}</span>
+      </nav>
 
-      <div className="flex items-start justify-between mb-8">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-white">{data.name}</h1>
-          <a
-            href={data.base_url}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-blue-400 hover:underline text-sm mt-1 inline-block"
-          >
+          <h1 className="page-title">{data.name}</h1>
+          <a href={data.base_url} target="_blank" rel="noopener noreferrer"
+            style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, color: "var(--text-2)", marginTop: 4, display: "block" }}>
             {data.base_url}
           </a>
         </div>
         <button
+          className="btn btn-primary"
           disabled={runMutation.isPending}
           onClick={() => runMutation.mutate()}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors disabled:opacity-50"
         >
           {runMutation.isPending ? "Starting…" : "Run Now"}
         </button>
       </div>
 
-      <h2 className="text-sm font-medium text-gray-400 uppercase tracking-wide mb-3">Runs</h2>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+        <p style={{ fontSize: 10, fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--text-3)" }}>
+          Run History
+        </p>
+        <p className="truncate-id">{data.runs.length} run{data.runs.length !== 1 ? "s" : ""}</p>
+      </div>
 
       {data.runs.length === 0 ? (
-        <div className="rounded-lg border border-gray-700 bg-gray-900 p-12 text-center">
-          <p className="text-gray-400">No runs yet. Click Run Now to start crawling.</p>
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="var(--text-3)" strokeWidth="1.5">
+              <polygon points="4,2 14,8 4,14" />
+            </svg>
+          </div>
+          <p className="empty-state-title">No runs yet</p>
+          <p className="empty-state-sub">Click Run Now to start the first crawl</p>
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-700 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-700 bg-gray-800/60">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Status</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Triggered</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Pages</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Findings</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Started</th>
+        <table className="dc-table">
+          <thead>
+            <tr>
+              <th>Status</th>
+              <th>Started</th>
+              <th>Trigger</th>
+              <th>Pages</th>
+              <th>Drift</th>
+              <th>A11y</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.runs.map(run => (
+              <tr key={run.id} style={{ cursor: "pointer" }} onClick={() => window.location.href = `/runs/${run.id}`}>
+                <td><RunStatusBadge status={run.status} /></td>
+                <td style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>{fmt(run.started_at)}</td>
+                <td style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--text-3)", textTransform: "uppercase", letterSpacing: "0.04em" }}>
+                  {run.triggered_by}
+                </td>
+                <td style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12 }}>{run.pages_crawled}</td>
+                <td>
+                  {run.drift_count > 0
+                    ? <span className="sev-chip sev-chip-major">{run.drift_count}</span>
+                    : <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--text-3)" }}>0</span>}
+                </td>
+                <td>
+                  {run.a11y_count > 0
+                    ? <span className="sev-chip sev-chip-minor">{run.a11y_count}</span>
+                    : <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--text-3)" }}>0</span>}
+                </td>
+                <td style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--text-3)" }}>
+                  {dur(run.started_at, run.completed_at)}
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {data.runs.map((run) => (
-                <tr key={run.id} className="hover:bg-gray-800/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link to={`/runs/${run.id}`}>
-                      <RunStatusBadge status={run.status} />
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm capitalize">{run.triggered_by}</td>
-                  <td className="px-4 py-3 text-gray-400 text-sm">{run.pages_crawled}</td>
-                  <td className="px-4 py-3 text-sm">
-                    {run.findings_count > 0 ? (
-                      <span className="text-yellow-400 font-medium">{run.findings_count}</span>
-                    ) : (
-                      <span className="text-gray-500">0</span>
-                    )}
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm">
-                    {new Date(run.started_at).toLocaleString()}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
     </div>
   );

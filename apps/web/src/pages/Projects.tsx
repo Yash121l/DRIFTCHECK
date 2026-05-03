@@ -4,79 +4,102 @@ import { Link } from "react-router-dom";
 import { useProjects } from "../hooks/useProject";
 import { api } from "../lib/api";
 
+function timeAgo(ts: number): string {
+  const d = Math.floor((Date.now() - ts) / 1000);
+  if (d < 60) return `${d}s ago`;
+  if (d < 3600) return `${Math.floor(d / 60)}m ago`;
+  if (d < 86400) return `${Math.floor(d / 3600)}h ago`;
+  return `${Math.floor(d / 86400)}d ago`;
+}
+
 export default function Projects() {
   const { data: projects, isLoading, error } = useProjects();
   const [showModal, setShowModal] = useState(false);
   const queryClient = useQueryClient();
 
   const runMutation = useMutation({
-    mutationFn: (projectId: string) => api.runs.create(projectId, "manual"),
+    mutationFn: (id: string) => api.runs.create(id, "manual"),
     onSuccess: () => queryClient.invalidateQueries({ queryKey: ["projects"] }),
   });
 
-  if (isLoading) return <LoadingScreen />;
-  if (error) return <ErrorScreen message={(error as Error).message} />;
+  if (isLoading) return <div className="spinner-screen"><div className="spinner" /></div>;
+  if (error) return <div className="spinner-screen" style={{ color: "var(--red)", fontSize: 13 }}>{(error as Error).message}</div>;
 
   return (
-    <div className="max-w-5xl mx-auto px-4 py-8">
-      <div className="flex items-center justify-between mb-6">
+    <div className="page-wrap">
+      <div className="page-header">
         <div>
-          <h1 className="text-2xl font-bold text-white">DriftCheck</h1>
-          <p className="text-gray-400 text-sm mt-0.5">Visual & accessibility regression monitoring</p>
+          <h1 className="page-title">Projects</h1>
+          <p className="page-sub">
+            {projects?.length ?? 0} site{(projects?.length ?? 0) !== 1 ? "s" : ""} monitored
+          </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium rounded-lg transition-colors"
-        >
-          + New Project
+        <button className="btn btn-primary" onClick={() => setShowModal(true)}>
+          <svg width="12" height="12" viewBox="0 0 12 12" fill="none" stroke="currentColor" strokeWidth="2">
+            <line x1="6" y1="1" x2="6" y2="11" /><line x1="1" y1="6" x2="11" y2="6" />
+          </svg>
+          New Project
         </button>
       </div>
 
       {projects?.length === 0 ? (
-        <div className="rounded-lg border border-gray-700 bg-gray-900 p-12 text-center">
-          <p className="text-gray-400">No projects yet. Create one to start monitoring.</p>
+        <div className="empty-state">
+          <div className="empty-state-icon">
+            <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="var(--text-3)" strokeWidth="1.5">
+              <circle cx="9" cy="9" r="7" /><circle cx="9" cy="9" r="2" />
+              <line x1="9" y1="1" x2="9" y2="4" /><line x1="9" y1="14" x2="9" y2="17" />
+              <line x1="1" y1="9" x2="4" y2="9" /><line x1="14" y1="9" x2="17" y2="9" />
+            </svg>
+          </div>
+          <p className="empty-state-title">No projects yet</p>
+          <p className="empty-state-sub">Add a site to start monitoring for visual drift</p>
+          <button className="btn btn-primary" style={{ marginTop: 8 }} onClick={() => setShowModal(true)}>
+            Create first project
+          </button>
         </div>
       ) : (
-        <div className="rounded-lg border border-gray-700 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-gray-700 bg-gray-800/60">
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Project</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">URL</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Last Run</th>
-                <th className="text-left px-4 py-3 text-xs font-medium text-gray-400 uppercase tracking-wide">Actions</th>
+        <table className="dc-table">
+          <thead>
+            <tr>
+              <th>Project</th>
+              <th>URL</th>
+              <th>Last Run</th>
+              <th>Max Pages</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {projects?.map(p => (
+              <tr key={p.id}>
+                <td>
+                  <Link to={`/projects/${p.id}`} className="link-accent" style={{ fontSize: 13, fontWeight: 700 }}>
+                    {p.name}
+                  </Link>
+                  <p className="truncate-id" style={{ marginTop: 2 }}>{p.id.slice(0, 8)}…</p>
+                </td>
+                <td>
+                  <a href={p.base_url} target="_blank" rel="noopener noreferrer" className="link-dim"
+                    style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>
+                    {p.base_url.replace(/^https?:\/\//, "")}
+                  </a>
+                </td>
+                <td style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>
+                  {p.last_run_at ? timeAgo(p.last_run_at) : <span style={{ color: "var(--text-3)" }}>Never</span>}
+                </td>
+                <td style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11 }}>{p.max_pages}</td>
+                <td style={{ textAlign: "right" }}>
+                  <button
+                    className="btn btn-ghost btn-sm"
+                    disabled={runMutation.isPending}
+                    onClick={() => runMutation.mutate(p.id)}
+                  >
+                    {runMutation.isPending ? "…" : "Run Now"}
+                  </button>
+                </td>
               </tr>
-            </thead>
-            <tbody className="divide-y divide-gray-800">
-              {projects?.map((p) => (
-                <tr key={p.id} className="hover:bg-gray-800/30 transition-colors">
-                  <td className="px-4 py-3">
-                    <Link to={`/projects/${p.id}`} className="text-blue-400 hover:underline font-medium">
-                      {p.name}
-                    </Link>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm truncate max-w-xs">
-                    <a href={p.base_url} target="_blank" rel="noopener noreferrer" className="hover:text-blue-400">
-                      {p.base_url}
-                    </a>
-                  </td>
-                  <td className="px-4 py-3 text-gray-400 text-sm">
-                    {p.last_run_at ? new Date(p.last_run_at).toLocaleString() : "Never"}
-                  </td>
-                  <td className="px-4 py-3">
-                    <button
-                      disabled={runMutation.isPending}
-                      onClick={() => runMutation.mutate(p.id)}
-                      className="text-xs px-3 py-1.5 rounded bg-gray-700 hover:bg-gray-600 text-gray-200 transition-colors disabled:opacity-50"
-                    >
-                      Run Now
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+            ))}
+          </tbody>
+        </table>
       )}
 
       {showModal && <NewProjectModal onClose={() => setShowModal(false)} />}
@@ -86,92 +109,66 @@ export default function Projects() {
 
 function NewProjectModal({ onClose }: { onClose: () => void }) {
   const queryClient = useQueryClient();
-  const [form, setForm] = useState({
-    name: "",
-    baseUrl: "",
-    alertEmail: "",
-    cronSchedule: "",
-    maxPages: "50",
-  });
-  const [error, setError] = useState<string | null>(null);
+  const [form, setForm] = useState({ name: "", baseUrl: "", alertEmail: "", cronSchedule: "", maxPages: "50" });
+  const [err, setErr] = useState<string | null>(null);
 
   const mutation = useMutation({
-    mutationFn: () =>
-      api.projects.create({
-        name: form.name,
-        baseUrl: form.baseUrl,
-        alertEmail: form.alertEmail || undefined,
-        cronSchedule: form.cronSchedule || undefined,
-        maxPages: Math.min(100, Math.max(1, Number(form.maxPages) || 50)),
-      }),
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["projects"] });
-      onClose();
-    },
-    onError: (err) => setError(err instanceof Error ? err.message : "Failed to create project"),
+    mutationFn: () => api.projects.create({
+      name: form.name,
+      baseUrl: form.baseUrl,
+      alertEmail: form.alertEmail || undefined,
+      cronSchedule: form.cronSchedule || undefined,
+      maxPages: Math.min(100, Math.max(1, Number(form.maxPages) || 50)),
+    }),
+    onSuccess: () => { queryClient.invalidateQueries({ queryKey: ["projects"] }); onClose(); },
+    onError: (e) => setErr(e instanceof Error ? e.message : "Failed"),
   });
 
+  function set(k: keyof typeof form) {
+    return (e: React.ChangeEvent<HTMLInputElement>) => setForm(f => ({ ...f, [k]: e.target.value }));
+  }
+
   return (
-    <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
-      <div className="bg-gray-900 border border-gray-700 rounded-xl w-full max-w-md p-6 space-y-4">
-        <h2 className="text-lg font-semibold text-white">New Project</h2>
+    <div className="modal-overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <p className="modal-title">New Project</p>
 
-        <Field label="Name *">
-          <input className={inputClass} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="My Website" />
-        </Field>
-        <Field label="Base URL * (HTTPS)">
-          <input className={inputClass} value={form.baseUrl} onChange={(e) => setForm({ ...form, baseUrl: e.target.value })} placeholder="https://example.com" />
-        </Field>
-        <Field label="Alert Email">
-          <input className={inputClass} value={form.alertEmail} onChange={(e) => setForm({ ...form, alertEmail: e.target.value })} placeholder="alerts@example.com" />
-        </Field>
-        <Field label="Cron Schedule">
-          <input className={inputClass} value={form.cronSchedule} onChange={(e) => setForm({ ...form, cronSchedule: e.target.value })} placeholder="0 9 * * 1-5" />
-        </Field>
-        <Field label="Max Pages (1–100)">
-          <input type="number" className={inputClass} value={form.maxPages} onChange={(e) => setForm({ ...form, maxPages: e.target.value })} min="1" max="100" />
-        </Field>
+        {err && <div className="error-banner">{err}</div>}
 
-        {error && <p className="text-red-400 text-sm">{error}</p>}
+        <div className="field">
+          <label className="field-label">Name *</label>
+          <input className="field-input" placeholder="My Website" value={form.name} onChange={set("name")} />
+        </div>
+        <div className="field">
+          <label className="field-label">Base URL * (HTTPS)</label>
+          <input className="field-input" placeholder="https://example.com" value={form.baseUrl} onChange={set("baseUrl")} />
+        </div>
+        <div className="field">
+          <label className="field-label">Alert Email</label>
+          <input className="field-input" placeholder="alerts@example.com" value={form.alertEmail} onChange={set("alertEmail")} />
+        </div>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <div className="field">
+            <label className="field-label">Cron Schedule</label>
+            <input className="field-input" placeholder="0 9 * * 1-5" value={form.cronSchedule} onChange={set("cronSchedule")} />
+          </div>
+          <div className="field">
+            <label className="field-label">Max Pages (1–100)</label>
+            <input className="field-input" type="number" min="1" max="100" value={form.maxPages} onChange={set("maxPages")} />
+          </div>
+        </div>
 
-        <div className="flex justify-end gap-3 pt-2">
-          <button onClick={onClose} className="px-4 py-2 text-sm text-gray-400 hover:text-white transition-colors">Cancel</button>
+        <div style={{ display: "flex", justifyContent: "flex-end", gap: 8, marginTop: 8 }}>
+          <button className="btn btn-ghost" onClick={onClose}>Cancel</button>
           <button
+            className="btn btn-primary"
             disabled={mutation.isPending || !form.name || !form.baseUrl}
             onClick={() => mutation.mutate()}
-            className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-sm rounded-lg disabled:opacity-50 transition-colors"
           >
-            {mutation.isPending ? "Creating…" : "Create"}
+            {mutation.isPending ? "Creating…" : "Create Project"}
           </button>
         </div>
       </div>
-    </div>
-  );
-}
-
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div>
-      <label className="block text-xs font-medium text-gray-400 mb-1">{label}</label>
-      {children}
-    </div>
-  );
-}
-
-const inputClass = "w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-500 focus:outline-none focus:border-blue-500";
-
-function LoadingScreen() {
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin" />
-    </div>
-  );
-}
-
-function ErrorScreen({ message }: { message: string }) {
-  return (
-    <div className="flex items-center justify-center min-h-screen">
-      <p className="text-red-400">{message}</p>
     </div>
   );
 }

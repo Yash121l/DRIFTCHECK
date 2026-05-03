@@ -7,19 +7,23 @@ interface Props {
   diffScore: number;
 }
 
-function ScreenshotPane({ src, label }: { src: string | null; label: string }) {
+function ImgPane({ src, label }: { src: string | null; label: string }) {
   const [failed, setFailed] = useState(false);
 
   if (!src || failed) {
     return (
-      <div className="flex h-full flex-col items-center justify-center bg-gray-800 gap-2">
-        <div className="w-10 h-10 rounded-lg bg-gray-700 flex items-center justify-center">
-          <svg className="w-5 h-5 text-gray-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-              d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-          </svg>
-        </div>
-        <p className="text-gray-500 text-xs">{src ? "Screenshot unavailable" : "No baseline yet"}</p>
+      <div style={{
+        display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+        height: "100%", gap: 8, background: "var(--sf-2)",
+      }}>
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-3)" strokeWidth="1.5">
+          <rect x="3" y="3" width="18" height="18" rx="2" />
+          <path d="M3 15l5-5 4 4 3-3 6 6" />
+          <circle cx="8.5" cy="8.5" r="1.5" />
+        </svg>
+        <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 10, color: "var(--text-3)" }}>
+          {src ? "Unavailable" : "No baseline"}
+        </p>
       </div>
     );
   }
@@ -38,86 +42,117 @@ export default function DiffViewer({ currentKey, baselineKey, diffScore }: Props
   const [sliderPos, setSliderPos] = useState(50);
   const [mode, setMode] = useState<"split" | "overlay">("split");
   const containerRef = useRef<HTMLDivElement>(null);
+  const dragging = useRef(false);
 
   const currentUrl = api.findings.screenshotUrl(currentKey);
   const baselineUrl = baselineKey ? api.findings.screenshotUrl(baselineKey) : null;
 
-  function handleMouseMove(e: React.MouseEvent) {
-    if (!containerRef.current) return;
+  function onMouseMove(e: React.MouseEvent) {
+    if (!dragging.current || !containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const pct = ((e.clientX - rect.left) / rect.width) * 100;
     setSliderPos(Math.max(5, Math.min(95, pct)));
   }
 
-  const pctDiff = (diffScore * 100).toFixed(1);
+  const pct = (diffScore * 100).toFixed(1);
+  const scoreColor = diffScore > 0.3 ? "var(--red)" : diffScore > 0.15 ? "var(--accent)" : "var(--yellow)";
 
   return (
-    <div className="space-y-3">
-      <div className="flex items-center justify-between">
-        <p className="text-sm text-gray-400">
-          <span className={`font-semibold ${diffScore > 0.3 ? "text-red-400" : diffScore > 0.15 ? "text-orange-400" : "text-yellow-400"}`}>
-            {pctDiff}% different
-          </span>{" "}
-          from baseline (cosine distance: {diffScore.toFixed(4)})
+    <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+      {/* Controls */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+        <p style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 11, color: "var(--text-2)" }}>
+          <span style={{ color: scoreColor, fontWeight: 600 }}>{pct}%</span> different
+          <span style={{ color: "var(--text-3)", marginLeft: 8 }}>({diffScore.toFixed(4)})</span>
         </p>
-        <div className="flex gap-2">
-          <button
-            onClick={() => setMode("split")}
-            className={`px-3 py-1 text-xs rounded ${mode === "split" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
-          >
-            Split
-          </button>
-          <button
-            onClick={() => setMode("overlay")}
-            className={`px-3 py-1 text-xs rounded ${mode === "overlay" ? "bg-blue-600 text-white" : "bg-gray-700 text-gray-300"}`}
-          >
-            Overlay
-          </button>
+        <div style={{ display: "flex", gap: 4 }}>
+          {(["split", "overlay"] as const).map(m => (
+            <button
+              key={m}
+              className={`btn btn-sm ${mode === m ? "btn-primary" : "btn-ghost"}`}
+              onClick={() => setMode(m)}
+              style={{ textTransform: "capitalize" as const }}
+            >
+              {m}
+            </button>
+          ))}
         </div>
       </div>
 
+      {/* Viewer */}
       {mode === "split" ? (
         <div
           ref={containerRef}
-          className="relative h-96 overflow-hidden rounded-lg border border-gray-700 cursor-col-resize select-none"
-          onMouseMove={handleMouseMove}
+          style={{
+            position: "relative", height: 320, overflow: "hidden",
+            borderRadius: 6, border: "1px solid var(--border)",
+            cursor: "col-resize", userSelect: "none",
+            background: "var(--sf-2)",
+          }}
+          onMouseMove={onMouseMove}
+          onMouseDown={() => { dragging.current = true; }}
+          onMouseUp={() => { dragging.current = false; }}
+          onMouseLeave={() => { dragging.current = false; }}
         >
-          {/* Baseline (left) */}
-          <div className="absolute inset-0 overflow-hidden" style={{ width: `${sliderPos}%` }}>
-            <ScreenshotPane src={baselineUrl} label="Baseline" />
-            <div className="absolute top-2 left-2 rounded bg-black/60 px-2 py-0.5 text-xs text-gray-300 z-10">Baseline</div>
+          {/* Baseline */}
+          <div style={{ position: "absolute", inset: 0, overflow: "hidden", width: `${sliderPos}%` }}>
+            <ImgPane src={baselineUrl} label="Baseline" />
+            <span style={{
+              position: "absolute", top: 8, left: 8, zIndex: 2,
+              fontFamily: "'JetBrains Mono',monospace", fontSize: 9, fontWeight: 600,
+              letterSpacing: "0.08em", textTransform: "uppercase" as const,
+              background: "rgba(0,0,0,0.7)", color: "var(--text-2)", padding: "2px 6px", borderRadius: 3,
+            }}>Baseline</span>
           </div>
 
-          {/* Current (right) */}
-          <div className="absolute inset-0 overflow-hidden" style={{ left: `${sliderPos}%` }}>
-            <ScreenshotPane src={currentUrl} label="Current" />
-            <div className="absolute top-2 right-2 rounded bg-black/60 px-2 py-0.5 text-xs text-gray-300 z-10">Current</div>
+          {/* Current */}
+          <div style={{ position: "absolute", inset: 0, overflow: "hidden", left: `${sliderPos}%` }}>
+            <img
+              src={currentUrl}
+              alt="Current"
+              style={{ position: "absolute", top: 0, height: "100%", width: "auto", maxWidth: "none", left: `-${sliderPos}%` }}
+              onError={() => {}}
+            />
+            <span style={{
+              position: "absolute", top: 8, right: 8, zIndex: 2,
+              fontFamily: "'JetBrains Mono',monospace", fontSize: 9, fontWeight: 600,
+              letterSpacing: "0.08em", textTransform: "uppercase" as const,
+              background: "rgba(0,0,0,0.7)", color: "var(--accent)", padding: "2px 6px", borderRadius: 3,
+            }}>Current</span>
           </div>
 
-          {/* Slider divider */}
-          <div
-            className="absolute top-0 bottom-0 w-0.5 bg-white/80 cursor-col-resize z-20"
-            style={{ left: `${sliderPos}%` }}
-          >
-            <div className="absolute top-1/2 -translate-y-1/2 -translate-x-1/2 bg-white rounded-full w-6 h-6 flex items-center justify-center text-gray-800 text-xs font-bold shadow">
-              ⇔
-            </div>
+          {/* Divider */}
+          <div style={{
+            position: "absolute", top: 0, bottom: 0, left: `${sliderPos}%`,
+            width: 1, background: "var(--accent)", zIndex: 10,
+            transform: "translateX(-0.5px)",
+          }}>
+            <div style={{
+              position: "absolute", top: "50%", left: "50%",
+              transform: "translate(-50%, -50%)",
+              width: 22, height: 22, borderRadius: "50%",
+              background: "var(--accent)", display: "flex", alignItems: "center", justifyContent: "center",
+              color: "#000", fontSize: 10, fontWeight: 700, flexShrink: 0,
+              boxShadow: "0 0 0 3px rgba(249,115,22,0.25)",
+            }}>⇔</div>
           </div>
         </div>
       ) : (
-        <div className="relative h-96 rounded-lg border border-gray-700 overflow-hidden bg-gray-900">
-          <ScreenshotPane src={baselineUrl} label="Baseline" />
-          {currentUrl && (
-            <img
-              src={currentUrl}
-              alt="Current (overlay)"
-              className="absolute inset-0 h-full w-full object-contain"
-              style={{ mixBlendMode: "difference" }}
-            />
+        <div style={{
+          position: "relative", height: 320, overflow: "hidden",
+          borderRadius: 6, border: "1px solid var(--border)", background: "#fff",
+        }}>
+          {baselineUrl && (
+            <img src={baselineUrl} alt="Baseline"
+              style={{ position: "absolute", inset: 0, height: "100%", width: "100%", objectFit: "contain" }} />
           )}
-          <div className="absolute top-2 left-2 rounded bg-black/60 px-2 py-0.5 text-xs text-gray-300 z-10">
-            Pixel diff (white = changed)
-          </div>
+          <img src={currentUrl} alt="Overlay"
+            style={{ position: "absolute", inset: 0, height: "100%", width: "100%", objectFit: "contain", mixBlendMode: "difference" }} />
+          <span style={{
+            position: "absolute", top: 8, left: 8,
+            fontFamily: "'JetBrains Mono',monospace", fontSize: 9,
+            background: "rgba(0,0,0,0.7)", color: "var(--text-2)", padding: "2px 6px", borderRadius: 3,
+          }}>white = changed</span>
         </div>
       )}
     </div>

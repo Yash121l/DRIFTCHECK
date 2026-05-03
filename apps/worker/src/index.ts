@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { z } from "zod";
 import puppeteer from "@cloudflare/puppeteer";
 import { promoteToBaseline } from "./differ";
@@ -29,7 +30,12 @@ const ReviewSchema = z.object({
 
 const app = new Hono<{ Bindings: Env }>();
 
-// ── Auth middleware for review endpoints ──────────────────────────────────────
+app.use("/api/*", cors({
+  origin: ["https://main.driftcheck-web.pages.dev", "http://localhost:5173"],
+  allowMethods: ["GET", "POST", "OPTIONS"],
+  allowHeaders: ["Content-Type", "Authorization"],
+}));
+
 // ── Projects ──────────────────────────────────────────────────────────────────
 app.post("/api/projects", async (c) => {
   const body = await c.req.json().catch(() => null);
