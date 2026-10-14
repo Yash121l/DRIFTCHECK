@@ -10,3 +10,6 @@ npm-debug.log*
 .DS_Store
 .vscode/
 coverage/
+
+# public PostHog client key for the dashboard build
+!apps/web/.env.production

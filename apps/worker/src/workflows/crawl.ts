@@ -2,6 +2,7 @@ import { WorkflowEntrypoint, WorkflowEvent, WorkflowStep } from "cloudflare:work
 import { auditAccessibility } from "../auditor";
 import { crawlPage, discoverPages } from "../crawler";
 import { diffPage, updateBaselines } from "../differ";
+import { sendEvent } from "../analytics";
 import { sendAlertEmail } from "../notifier";
 import type { A11yResult, CrawlConfig, DiffResult, Env, PageCrawlResult } from "../types";
 
@@ -100,6 +101,23 @@ export class CrawlWorkflow extends WorkflowEntrypoint<Env, CrawlConfig> {
       await this.env.DB.prepare(
         "UPDATE projects SET last_run_at=? WHERE id=?"
       ).bind(Date.now(), config.projectId).run();
+    });
+
+    // Analytics in its own step so a replay doesn't send it twice; sendEvent never throws.
+    await step.do("analytics-run-completed", async () => {
+      await sendEvent(this.env, "run_completed", {
+        project_id: config.projectId,
+        triggered_by: config.triggeredBy ?? null,
+        pages_discovered: pages.length,
+        pages_crawled: crawlResults.length,
+        pages_failed: pages.length - crawlResults.length,
+        new_pages: diffResults.filter((d) => d.isNewPage).length,
+        drift_count: driftCount,
+        a11y_count: a11yCount,
+        findings_count: totalFindings,
+        alert_triggered: totalFindings > 0, // email goes out only if the project has an alert address
+        duration_ms: Date.now() - event.timestamp.getTime(),
+      });
     });
 
     return { runId: config.runId, pagesChecked: crawlResults.length, findingsCount: totalFindings };

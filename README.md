@@ -254,6 +254,16 @@ Tests cover:
 
 ---
 
+## Analytics
+
+PostHog, US cloud, `app: driftcheck` on every event. The dashboard loads posthog-js through
+the `/ingest/*` Pages Function (`apps/web/functions/ingest`) and captures pageviews, web
+vitals, replays with masked inputs, and `project_created`, `run_triggered`,
+`finding_reviewed` and `live_view_opened`. The worker sends anonymous `run_started`,
+`run_completed` and `cron_tick` events with counts and timings only, never site URLs or
+finding text. The public project key is `POSTHOG_KEY` in `apps/worker/wrangler.toml` and
+`VITE_POSTHOG_KEY` in `apps/web/.env.production`. Remove either to turn that side off.
+
 ## Severity Levels
 
 | Level | Visual Drift | Accessibility |

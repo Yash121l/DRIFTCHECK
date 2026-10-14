@@ -43,3 +43,5 @@ crons = ["0 */6 * * *"]
 
 [vars]
 BASE_URL = "https://driftcheck-worker.yashlunawat-tech.workers.dev"
+# PostHog public project key (safe to commit); remove to turn server analytics off
+POSTHOG_KEY = "phc_oLm8fb7L4CXDqGdJcc7a6boCtR8rVjf6dNx7G995eGdy"

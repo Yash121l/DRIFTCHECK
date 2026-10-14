@@ -5,6 +5,8 @@ export interface CrawlConfig {
   maxPages: number;
   viewportWidth: number;
   viewportHeight: number;
+  /** For analytics only; older queued runs may not carry it. */
+  triggeredBy?: "manual" | "cron" | "webhook";
 }
 
 export interface PageCrawlResult {
@@ -57,6 +59,8 @@ export interface Env {
   API_KEYS: KVNamespace;
   // Vars
   BASE_URL: string;
+  /** PostHog public project key; unset turns analytics off. */
+  POSTHOG_KEY?: string;
 }
 
 export const FindingType = {

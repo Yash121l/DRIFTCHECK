@@ -6,6 +6,7 @@ import { promoteToBaseline } from "./differ";
 import { getFinding, getFindingsForRun, getRun, getWebhookForProject, listProjects, listRunsForProject, createProject, createRun, getProject } from "./db/queries";
 import type { Env } from "./types";
 import { isUUID, isCronDue } from "./utils";
+import { capture } from "./analytics";
 import { CrawlWorkflow } from "./workflows/crawl";
 
 export { CrawlWorkflow };
@@ -29,6 +30,15 @@ const ReviewSchema = z.object({
 });
 
 const app = new Hono<{ Bindings: Env }>();
+
+/** The request's ExecutionContext, or undefined where there is none (tests call app.request without one). */
+function execCtx(c: { executionCtx: ExecutionContext }): ExecutionContext | undefined {
+  try {
+    return c.executionCtx;
+  } catch {
+    return undefined;
+  }
+}
 
 app.use("/api/*", cors({
   origin: ["https://main.driftcheck-web.pages.dev", "http://localhost:5173"],
@@ -101,6 +111,7 @@ app.post("/api/projects/:id/runs", async (c) => {
     params: {
       projectId,
       runId,
+      triggeredBy: parsed.data.triggeredBy,
       baseUrl: project.base_url,
       maxPages: Math.min(project.max_pages, 100),
       viewportWidth: project.viewport_width,
@@ -108,6 +119,7 @@ app.post("/api/projects/:id/runs", async (c) => {
     },
   });
 
+  capture(c.env, execCtx(c), "run_started", { triggered_by: parsed.data.triggeredBy, project_id: projectId, max_pages: Math.min(project.max_pages, 100) });
   return c.json({ runId, workflowId: workflow.id }, 202);
 });
 
@@ -253,6 +265,7 @@ app.post("/api/webhooks/:projectId", async (c) => {
     params: {
       projectId,
       runId,
+      triggeredBy: "webhook",
       baseUrl: project.base_url,
       maxPages: Math.min(project.max_pages, 100),
       viewportWidth: project.viewport_width,
@@ -260,6 +273,7 @@ app.post("/api/webhooks/:projectId", async (c) => {
     },
   });
 
+  capture(c.env, execCtx(c), "run_started", { triggered_by: "webhook", project_id: projectId, max_pages: Math.min(project.max_pages, 100) });
   return c.json({ runId }, 202);
 });
 
@@ -272,8 +286,9 @@ function hexToBytes(hex: string): Uint8Array {
 }
 
 // ── Cron handler ──────────────────────────────────────────────────────────────
-async function handleCron(env: Env): Promise<void> {
+async function handleCron(env: Env, ctx?: ExecutionContext): Promise<void> {
   const now = new Date();
+  let started = 0;
   const projects = await env.DB.prepare(
     "SELECT * FROM projects WHERE cron_schedule IS NOT NULL"
   ).all<{ id: string; base_url: string; max_pages: number; viewport_width: number; viewport_height: number; cron_schedule: string }>();
@@ -298,13 +313,18 @@ async function handleCron(env: Env): Promise<void> {
       params: {
         projectId: project.id,
         runId,
+        triggeredBy: "cron",
         baseUrl: project.base_url,
         maxPages: Math.min(project.max_pages, 100),
         viewportWidth: project.viewport_width,
         viewportHeight: project.viewport_height,
       },
     });
+    started++;
+    capture(env, ctx, "run_started", { triggered_by: "cron", project_id: project.id, max_pages: Math.min(project.max_pages, 100) });
   }
+  // one event per cron tick, counts only
+  capture(env, ctx, "cron_tick", { scheduled_projects: projects.results.length, runs_started: started });
 }
 
 // ── Worker export ─────────────────────────────────────────────────────────────
@@ -312,7 +332,7 @@ export { app };
 
 export default {
   fetch: app.fetch,
-  async scheduled(_event: ScheduledEvent, env: Env, _ctx: ExecutionContext): Promise<void> {
-    await handleCron(env);
+  async scheduled(_event: ScheduledEvent, env: Env, ctx: ExecutionContext): Promise<void> {
+    await handleCron(env, ctx);
   },
 };

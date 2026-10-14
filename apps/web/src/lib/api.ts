@@ -1,3 +1,5 @@
+import { track } from "./analytics";
+
 const BASE = (import.meta.env.VITE_API_URL as string | undefined) ?? "/api";
 
 export interface Project {
@@ -65,7 +67,16 @@ export const api = {
       alertEmail?: string;
       cronSchedule?: string;
       maxPages?: number;
-    }) => request<Project>("/projects", { method: "POST", body: JSON.stringify(data) }),
+    }) =>
+      request<Project>("/projects", { method: "POST", body: JSON.stringify(data) }).then((p) => {
+        track("project_created", {
+          project_id: p.id,
+          max_pages: p.max_pages,
+          has_schedule: !!data.cronSchedule,
+          has_alert_email: !!data.alertEmail,
+        });
+        return p;
+      }),
   },
 
   runs: {
@@ -73,6 +84,9 @@ export const api = {
       request<{ runId: string; workflowId: string }>(`/projects/${projectId}/runs`, {
         method: "POST",
         body: JSON.stringify({ triggeredBy }),
+      }).then((r) => {
+        track("run_triggered", { project_id: projectId, triggered_by: triggeredBy });
+        return r;
       }),
     get: (runId: string) => request<Run & { findings: Finding[] }>(`/runs/${runId}`),
     findings: (
@@ -93,12 +107,18 @@ export const api = {
         method: "POST",
         headers: { Authorization: `Bearer ${apiKey}` },
         body: JSON.stringify({ action }),
+      }).then((r) => {
+        track("finding_reviewed", { finding_id: findingId, action });
+        return r;
       }),
     liveView: (findingId: string) =>
       request<{ sessionId: string; liveViewUrl: string; pageUrl: string }>(
         `/findings/${findingId}/live-view`,
         { method: "POST" }
-      ),
+      ).then((r) => {
+        track("live_view_opened", { finding_id: findingId });
+        return r;
+      }),
     screenshotUrl: (key: string) => `/api/screenshots/${key}`,
   },
 };
